@@ -16,6 +16,7 @@ The extension points, in the order you'll likely touch them:
   4. src/utils/parser.py   add_arguments                   -- add any task-specific CLI arguments.
   5. src/utils/dir.py      generate_output_path            -- name your saved output files.
   6. "Intervention mode" below                             -- the format of your --intervention spec file.
+  7. src/effects.py        is_correct                      -- score the intervention effect on task accuracy.
 
 To train a small model from scratch first, see src/train/ (tokenizer -> dataset -> model),
 which has its own TODO markers.
@@ -30,11 +31,10 @@ from pathlib import Path
 import numpy as np
 import torch
 from tqdm.auto import tqdm
-from transformers import BitsAndBytesConfig
 
 import inference
 import utils
-from model import LargeLanguageModel
+from model import load_model
 
 if __name__ == "__main__":
     # 1. Parse CLI arguments (defined in src/utils/parser.py).
@@ -53,20 +53,12 @@ if __name__ == "__main__":
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(args.seed)
 
-    # 3. Load the model. --quantize enables 4-bit loading (BitsAndBytes) to fit larger models in memory.
-    bnb_config = (
-        BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4", bnb_4bit_compute_dtype=torch.float16)
-        if args.quantize
-        else None
-    )
-    llm = LargeLanguageModel(
-        model_path=args.model_path,
-        bnb_config=bnb_config,
-        device=device,
-    )
+    # 3. Load the model into a TransformerLens bridge (works for real gpt2 AND a toy model you
+    #    trained from scratch -- just point --model-path at a Hub repo or local directory).
+    model = load_model(args.model_path, device)
 
     # 4. Choose which decoder layers to capture from (--layers; None = all of them).
-    layers = llm.get_layers(args.layers)
+    layers = args.layers if args.layers else list(range(model.cfg.n_layers))
 
     # 5. Build the prompts to run on. TODO: implement PromptDataset.generate_prompts (src/utils/dataset.py).
     # If your task needs extra parameters (operator, few-shot count, ...), add them as CLI args in
@@ -75,7 +67,7 @@ if __name__ == "__main__":
 
     # 6. Baseline run: generate on every prompt and capture activations (no ablation here).
     result = inference.run(
-        llm,
+        model,
         dataset,
         layers,
         args.max_new_tokens,
@@ -94,10 +86,10 @@ if __name__ == "__main__":
                 "model_path": args.model_path,
                 "num_prompts": args.num_prompts,
                 "num_layers": len(layers),
-                "layer_indices": list(layers.keys()),
+                "layer_indices": layers,
                 "max_new_tokens": args.max_new_tokens,
-                "num_attention_heads": llm.num_attention_heads,
-                "head_dim": llm.head_dim,
+                "num_attention_heads": model.cfg.n_heads,
+                "head_dim": model.cfg.d_head,
             },
         }
 
@@ -134,7 +126,7 @@ if __name__ == "__main__":
                     feat_type, local_idx = "head", feat_idx - num_mlp
 
                 ablated = inference.run(
-                    llm,
+                    model,
                     dataset,
                     layers,
                     args.max_new_tokens,
@@ -163,10 +155,10 @@ if __name__ == "__main__":
                 "model_path": args.model_path,
                 "num_prompts": args.num_prompts,
                 "num_layers": len(layers),
-                "layer_indices": list(layers.keys()),
+                "layer_indices": layers,
                 "max_new_tokens": args.max_new_tokens,
-                "num_attention_heads": llm.num_attention_heads,
-                "head_dim": llm.head_dim,
+                "num_attention_heads": model.cfg.n_heads,
+                "head_dim": model.cfg.d_head,
                 "intervention": args.intervention,
             },
         }
