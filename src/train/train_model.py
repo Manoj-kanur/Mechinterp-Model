@@ -36,8 +36,8 @@ from transformers import (
 
 # HF Hub repo holding your trained tokenizer (see train_tokenizer.py).
 # Example: TOKENIZER_NAME = "your-username/your-project-tokenizer"
-TOKENIZER_NAME: str = "./artifacts/tokenizer"
-DATASET_NAME: str = "./artifacts/dataset"
+TOKENIZER_NAME: str = "Manoj-kanur/Mechinterp-tokenizer"
+DATASET_NAME: str = "Manoj-kanur/Mechinterp-dataset"
 
 # Dataset with "train"/"validation" splits (see create_dataset.py). A local path such as
 # "./artifacts/dataset" or an HF Hub repo ID both work.

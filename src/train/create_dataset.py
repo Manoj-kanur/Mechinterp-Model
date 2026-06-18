@@ -200,8 +200,8 @@ if __name__ == "__main__":
         default="./artifacts/dataset",
         help="Local directory to save the dataset to when --hub-name is not given.",
     )
-    parser.add_argument("--train-size", type=int, default=1_000_000, help="Number of training rows")
-    parser.add_argument("--val-size", type=int, default=100_000, help="Number of validation rows")
+    parser.add_argument("--train-size", type=int, default=20_000, help="Number of training rows")
+    parser.add_argument("--val-size", type=int, default=20_000, help="Number of validation rows")
     parser.add_argument("--seed", type=int, default=42, help="Random seed (val uses seed + 1)")
     parser.add_argument(
         "--val-holdout",
