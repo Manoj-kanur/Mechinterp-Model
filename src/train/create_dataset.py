@@ -33,7 +33,7 @@ DIGIT_MAPS = {
 }
 LANGUAGES = list(DIGIT_MAPS.keys())
  
-PAD_WIDTH = 3  # zero-pad operands/answers to 3 digits
+PAD_WIDTH = 2  # zero-pad operands/answers to 3 digits
  
  
 def render_number(n: int, lang: str, width: int = PAD_WIDTH) -> str:
@@ -98,8 +98,9 @@ def build_dataset(seed: int, val_holdout: float, max_operand: int) -> DatasetDic
             train_rows.append({
                 "_id": f"train-{lang}-{i}",
                 "language": lang,
-                "question": f"{a}+{b}",
-                "answer": render_answer(a + b, lang),
+                "eng_question": f"{a}+{b}",
+                "eng_answer": str(a + b),
+                "response": render_answer(a + b, lang),
                 "prompt": render_equation(a, b, lang, solved=False),
             })
  
@@ -107,8 +108,9 @@ def build_dataset(seed: int, val_holdout: float, max_operand: int) -> DatasetDic
             val_rows.append({
                 "_id": f"val-{lang}-{i}",
                 "language": lang,
-                "question": f"{a}+{b}",
-                "answer": render_answer(a + b, lang),
+                "eng_question": f"{a}+{b}",
+                "eng_answer": str(a + b),
+                "response": render_answer(a + b, lang),
                 "prompt": render_equation(a, b, lang, solved=False),
             })
  
@@ -156,7 +158,7 @@ if __name__ == "__main__":
     #print(f"Generating dataset | train={args.train_size:,} val={args.val_size:,}\n")
 
     dataset = build_dataset(
-        max_operand = 999,
+        max_operand = 99,
         seed=args.seed,
         val_holdout=args.val_holdout,
     )

@@ -36,8 +36,8 @@ from transformers import (
 
 # HF Hub repo holding your trained tokenizer (see train_tokenizer.py).
 # Example: TOKENIZER_NAME = "your-username/your-project-tokenizer"
-TOKENIZER_NAME: str = "Manoj-kanur/Mechinterp-tokenizer"
-DATASET_NAME: str = "Manoj-kanur/Mechinterp-dataset"
+TOKENIZER_NAME: str = "artifacts/tokenizer"
+DATASET_NAME: str = "artifacts/dataset"
 
 # Dataset with "train"/"validation" splits (see create_dataset.py). A local path such as
 # "./artifacts/dataset" or an HF Hub repo ID both work.
@@ -109,9 +109,9 @@ class GenerationEvalTrainer(Trainer):
                     self.model, self.processing_class, batch["prompt"], self.eval_max_new_tokens
                 )
                 for j, predicted in enumerate(predictions):
-                    results.append({"predicted": predicted, "answer": batch["answer"][j]})
+                   results.append({"predicted": predicted, "response": batch["response"][j]})
 
-            accuracy = sum(r["predicted"] == r["answer"] for r in results) / len(results)
+            accuracy = sum(r["predicted"] == r["response"] for r in results) / len(results)
             metrics = {f"{metric_key_prefix}_accuracy": accuracy}
 
             # ------------------------------------------------------------------- #
@@ -137,7 +137,7 @@ class GenerationEvalTrainer(Trainer):
             for lang in sorted(set(languages)):
                 subset = [r for r, l in zip(results, languages) if l == lang]
                 metrics[f"{metric_key_prefix}_{lang}_accuracy"] = (
-                    sum(r["predicted"] == r["answer"] for r in subset) / len(subset) if subset else float("nan")
+                    sum(r["predicted"] == r["response"] for r in subset) / len(subset) if subset else float("nan")
                 )
 
             self.log(metrics)
@@ -279,7 +279,7 @@ if __name__ == "__main__":
         We train on the full string "prompt + answer + EOS". The model learns next-token
         prediction over the whole thing, so it learns both to continue prompts and to stop (EOS).
         """
-        texts = [p + a + tokenizer.eos_token for p, a in zip(batch["prompt"], batch["answer"])]
+        texts = [p + a + tokenizer.eos_token for p, a in zip(batch["prompt"], batch["response"])]
         return tokenizer(texts, truncation=True, max_length=args.max_position_embeddings)
 
     tokenized_train = raw_train.map(tokenize, batched=True, remove_columns=raw_train.column_names)
