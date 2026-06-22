@@ -31,7 +31,7 @@ from transformers import (
     TrainingArguments,
 )
 
-from utils import dataset
+# from utils import dataset
 
 # --------------------------------------------------------------------------- #
 # TODO: fill these in for your task.
@@ -39,8 +39,8 @@ from utils import dataset
 
 # HF Hub repo holding your trained tokenizer (see train_tokenizer.py).
 # Example: TOKENIZER_NAME = "your-username/your-project-tokenizer"
-TOKENIZER_NAME: str = "artifacts/tokenizer"
-DATASET_NAME: str = "artifacts/dataset"
+TOKENIZER_NAME: str = "CCBD-Interns/Mechinterp-revised-tokenizer"
+DATASET_NAME: str = "CCBD-Interns/Mechinterp-dataset-2digits"
 
 # Dataset with "train"/"validation" splits (see create_dataset.py). A local path such as
 # "./artifacts/dataset" or an HF Hub repo ID both work.
@@ -192,12 +192,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a small LM from scratch on a synthetic dataset")
 
     # Model size (GPT-2 config attribute names)
-    parser.add_argument("--hidden-size", type=int, default=256, help="Hidden size (GPT-2 n_embd)")
-    parser.add_argument("--num-hidden-layers", type=int, default=4, help="Number of transformer layers (GPT-2 n_layer)")
-    parser.add_argument("--num-attention-heads", type=int, default=4, help="Number of attention heads (GPT-2 n_head)")
-    parser.add_argument("--intermediate-size", type=int, default=1024, help="MLP/FFN inner size (GPT-2 n_inner)")
+    parser.add_argument("--hidden-size", type=int, default=128, help="Hidden size (GPT-2 n_embd)")
+    parser.add_argument("--num-hidden-layers", type=int, default=1, help="Number of transformer layers (GPT-2 n_layer)")
+    parser.add_argument("--num-attention-heads", type=int, default=2, help="Number of attention heads (GPT-2 n_head)")
+    # parser.add_argument("--intermediate-size", type=int, default=1024, help="MLP/FFN inner size (GPT-2 n_inner)")
     parser.add_argument(
-        "--max-position-embeddings", type=int, default=256, help="Max sequence length (GPT-2 n_positions)"
+        "--max-position-embeddings", type=int, default=16, help="Max sequence length (GPT-2 n_positions)"
     )
 
     # Hub + Training
@@ -212,9 +212,9 @@ if __name__ == "__main__":
         "--output-dir", type=str, default="./saved_models", help="Output directory for model checkpoints"
     )
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
-    parser.add_argument("--num-epochs", type=int, default=7, help="Number of training epochs")
+    parser.add_argument("--num-epochs", type=int, default=10, help="Number of training epochs")
     parser.add_argument("--batch-size", type=int, default=128, help="Batch size per device for train and eval")
-    parser.add_argument("--eval-max-new-tokens", type=int, default=16, help="Max tokens to generate per eval prompt")
+    parser.add_argument("--eval-max-new-tokens", type=int, default=10, help="Max tokens to generate per eval prompt")
     parser.add_argument("--learning-rate", type=float, default=1e-3, help="Peak learning rate")
     parser.add_argument("--warmup-ratio", type=float, default=0.05, help="Fraction of steps used for LR warmup")
     parser.add_argument(
@@ -246,6 +246,7 @@ if __name__ == "__main__":
     parser.add_argument("--run-name", type=str, default=None, help="Run name for the experiment tracker")
 
     args = parser.parse_args()
+    args.intermediate_size = 4 * args.hidden_size
 
     if not TOKENIZER_NAME or not DATASET_NAME:
         raise ValueError(
@@ -277,6 +278,7 @@ if __name__ == "__main__":
     # to control how big your model is: more layers/heads/width = more capacity but slower.
     config = GPT2Config(
         vocab_size=len(tokenizer),  # must match the tokenizer so the embedding/output sizes line up
+        
         n_embd=args.hidden_size,  # width of the residual stream (hidden_size)
         n_inner=args.intermediate_size,  # width of each MLP's hidden layer
         n_layer=args.num_hidden_layers,  # number of transformer blocks (depth)
