@@ -192,9 +192,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a small LM from scratch on a synthetic dataset")
 
     # Model size (GPT-2 config attribute names)
-    parser.add_argument("--hidden-size", type=int, default=128, help="Hidden size (GPT-2 n_embd)")
+    parser.add_argument("--hidden-size", type=int, default=64, help="Hidden size (GPT-2 n_embd)")
     parser.add_argument("--num-hidden-layers", type=int, default=1, help="Number of transformer layers (GPT-2 n_layer)")
-    parser.add_argument("--num-attention-heads", type=int, default=2, help="Number of attention heads (GPT-2 n_head)")
+    parser.add_argument("--num-attention-heads", type=int, default=8, help="Number of attention heads (GPT-2 n_head)")
     # parser.add_argument("--intermediate-size", type=int, default=1024, help="MLP/FFN inner size (GPT-2 n_inner)")
     parser.add_argument(
         "--max-position-embeddings", type=int, default=16, help="Max sequence length (GPT-2 n_positions)"
@@ -287,6 +287,10 @@ if __name__ == "__main__":
         pad_token_id=tokenizer.pad_token_id,
         bos_token_id=tokenizer.bos_token_id,
         eos_token_id=tokenizer.eos_token_id,
+        resid_pdrop=0.0,
+        embd_pdrop=0.0,
+        attn_pdrop=0.0,
+        summary_first_dropout=0.0,
     )
 
     # from_config builds the model with RANDOM weights (training "from scratch"), as opposed to
