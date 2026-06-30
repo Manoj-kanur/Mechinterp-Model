@@ -1,7 +1,8 @@
 """Train a small LM from scratch on a synthetic dataset (locally by default, or push to the HF Hub).
 
-Uses a GPT-2 architecture; only the size parameters (n_embd, n_layer, n_head, ...)
-are configurable, so you get a tiny randomly-initialised model.
+Uses a GPT-2 architecture; the size parameters (n_embd, n_layer, n_head, n_positions) are
+configurable via CLI args, so you get a tiny randomly-initialised model. The MLP inner size
+(n_inner) is always 4x hidden size (standard GPT-2 convention).
 
 Loads a pre-built tokenizer (see train_tokenizer.py; TOKENIZER_NAME below can be a
 local path such as "./artifacts/tokenizer" or an HF Hub repo ID) and trains on a
@@ -255,7 +256,7 @@ if __name__ == "__main__":
         vocab_size=len(tokenizer),  # must match the tokenizer so the embedding/output sizes line up
         
         n_embd=args.hidden_size,  # width of the residual stream (hidden_size)
-        n_inner=args.intermediate_size,  # width of each MLP's hidden layer
+        n_inner=4 * args.hidden_size,  # width of each MLP's hidden layer -- standard GPT-2 4x ratio
         n_layer=args.num_hidden_layers,  # number of transformer blocks (depth)
         n_head=args.num_attention_heads,  # attention heads per block
         n_positions=args.max_position_embeddings,  # max sequence length the model can handle
