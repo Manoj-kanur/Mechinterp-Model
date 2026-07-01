@@ -8,6 +8,7 @@ You implement `PromptDataset.generate_prompts`. A small self-contained example (
 addition) is shown in comments -- uncomment it to see the pipeline run, then replace it with
 prompts for your own task.
 """
+import random
 
 
 class PromptDataset:
@@ -40,51 +41,57 @@ class PromptDataset:
             A PromptDataset whose `.prompts` is a list of `num_prompts` {"prompt": str,
             "metadata": dict} entries.
         """
-        # ----------------------------------------------------------------------------------- #
-        # TODO: build your prompts and append each one to `instance.prompts` as a dict
-        #     {"prompt": <string>, "metadata": <dict of ground truth>}.
-        #
-        # WHAT a prompt should be:
-        #   The model continues whatever you give it, so end the prompt right where you want the
-        #   answer to begin. For arithmetic you'd end with "7+5=" so the model produces "12".
-        #   Whatever the model then generates is parsed by find_answer_span in src/inference.py.
-        #
-        # WHAT metadata is for:
-        #   A free-form dict of that prompt's ground truth (e.g. {"a": 7, "b": 5, "answer": "12"}).
-        #   It's copied verbatim onto the result row, so downstream code (scoring, lasso.py) can
-        #   compare the model's output against the truth. The pipeline never reads it -- use {} if
-        #   you don't need it.
-        #
-        # FEW-SHOT prompting (used in the example below):
-        #   Small models follow patterns better when you first show a few solved examples
-        #   ("shots") in the same prompt, separated by newlines, before the real question. The
-        #   model infers the rule from the examples. This is optional but common for tiny models.
-        #
-        # TIPS:
-        #   - Keep answers short (ideally one or two tokens) so the analysis is clean.
-        #   - Use a fixed random seed (main.py already seeds RNGs) so runs are reproducible.
-        #   - If your task needs extra knobs (operator, number of shots, digit count, ...), add
-        #     them as CLI arguments in src/utils/parser.py and as parameters to this method,
-        #     then pass them through from src/main.py.
-        # ----------------------------------------------------------------------------------- #
-        #
-        # Example (single-digit addition, 4-shot) -- uncomment to run the pipeline, then replace:
-        #
-        #     import random
-        #     instance = cls()
-        #     for _ in range(num_prompts):
-        #         shots = []                                    # the solved examples shown first
-        #         for _ in range(4):
-        #             a, b = random.randint(0, 9), random.randint(0, 9)
-        #             shots.append(f"{a}+{b}={a + b}")          # e.g. "7+5=12"
-        #         a, b = random.randint(0, 9), random.randint(0, 9)
-        #         instance.prompts.append(
-        #             {
-        #                 "prompt": "\n".join(shots) + f"\n{a}+{b}=",  # ends at "=", answer to come
-        #                 "metadata": {"a": a, "b": b, "answer": str(a + b)},
-        #             }
-        #         )
-        #     return instance
-        #
-        # ----------------------------------------------------------------------------------- #
+        # Define digit maps for multilingual support (matching create_dataset.py)
+        DIGIT_MAPS = {
+            "english": list("0123456789"),
+            "hindi": list("०१२३४५६७८९"),
+            "mandarin": list("零一二三四५६७८९"),
+        }
+        LANGUAGES = list(DIGIT_MAPS.keys())
+        PAD_WIDTH = 3  # zero-pad operands to 3 digits
+        
+        def render_number(n: int, lang: str, width: int = PAD_WIDTH) -> str:
+            """Render an integer digit-by-digit in the target language's numeral script."""
+            digits = DIGIT_MAPS[lang]
+            padded = str(n).zfill(width)
+            return "".join(digits[int(d)] for d in padded)
+        
+        def render_answer(n: int, lang: str) -> str:
+            """Render the answer with REVERSED digit order and NO zero-padding."""
+            digits = DIGIT_MAPS[lang]
+            return "".join(digits[int(d)] for d in str(n)[::-1])
+        
+        def render_equation(a: int, b: int, lang: str) -> str:
+            """Build the prompt ending with '=' so model generates the answer."""
+            ra, rb = render_number(a, lang), render_number(b, lang)
+            return f"{ra}+{rb}="
+        
+        instance = cls()
+        for _ in range(num_prompts):
+            # Randomly select language for this prompt
+            lang = random.choice(LANGUAGES)
+            
+            # Generate two random operands (0-999 to match training data)
+            a, b = random.randint(0, 999), random.randint(0, 999)
+            answer = a + b
+            
+            # Build the prompt (ends with "=" so model generates the answer)
+            prompt = render_equation(a, b, lang)
+            
+            # Store metadata for ground-truth comparison during scoring
+            instance.prompts.append(
+                {
+                    "prompt": prompt,
+                    "metadata": {
+                        "a": a,
+                        "b": b,
+                        "answer": render_answer(answer, lang),
+                        "language": lang,
+                        "eng_question": f"{a}+{b}",
+                        "eng_answer": str(answer),
+                    },
+                }
+            )
+        
+        return instance
         raise NotImplementedError("Implement PromptDataset.generate_prompts() -- see the example in comments.")

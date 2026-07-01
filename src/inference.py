@@ -55,16 +55,35 @@ def find_answer_span(generated_text: str) -> tuple[str, int, int] | None:
         (answer_text, start_char, end_char): the answer substring and its character offsets
         within generated_text, or None if no answer could be found (that prompt is then skipped).
     """
-    # TODO (optional): change how the answer is located for your task. Return the (text, start,
-    # end) of the answer substring, or None to skip the prompt. The default below works for many
-    # short answers; only change it if your answer format needs something more specific.
-    #
-    # Example (an arithmetic task whose answer is an integer, possibly negative, e.g. "12" or "-46"):
-    #     match = re.search(r"^\s*(-?\d+)", generated_text)
-    match = re.search(r"^\s*(\S+)", generated_text)
-    if not match:
+    # Improved default behavior: try several sensible heuristics in order to find an "answer"
+    # 1. Typical explicit labels like "Answer: 42" or "Answer -42"
+    # 2. An equals-sign style "= 42"
+    # 3. A leading signed/unsigned integer or float
+    # 4. Fallback to the first whitespace-delimited chunk (previous default)
+
+    if not generated_text:
         return None
-    return match.group(1), match.start(1), match.end(1)
+
+    # 1) Look for common explicit answer labels
+    m = re.search(r"^\s*(?:Answer|answer)\s*[:\-]\s*([+-]?\d+(?:\.\d+)?)", generated_text)
+    if m:
+        return m.group(1), m.start(1), m.end(1)
+
+    # 2) Look for an equals-sign followed by a number
+    m = re.search(r"=\s*([+-]?\d+(?:\.\d+)?)", generated_text)
+    if m:
+        return m.group(1), m.start(1), m.end(1)
+
+    # 3) Leading integer/float (signed optional)
+    m = re.search(r"^\s*([+-]?\d+(?:\.\d+)?)", generated_text)
+    if m:
+        return m.group(1), m.start(1), m.end(1)
+
+    # 4) Fallback: first non-whitespace token
+    m = re.search(r"^\s*(\S+)", generated_text)
+    if not m:
+        return None
+    return m.group(1), m.start(1), m.end(1)
 
 
 def find_positions_of_interest(model: TransformerBridge, prompt: str) -> dict[str, int | None]:
@@ -88,25 +107,47 @@ def find_positions_of_interest(model: TransformerBridge, prompt: str) -> dict[st
         IMPORTANT: index tokens WITHOUT a BOS prefix, to match how inference.py tokenizes prompts
         (prepend_bos=False), so the indices line up with the captured activations.
     """
-    # ----------------------------------------------------------------------------------- #
-    # TODO (optional): return the prompt token positions you want to study, e.g.
-    #     {"operator": 5, "first_operand": 3}. Leave it returning {} to capture only the answer.
-    # ----------------------------------------------------------------------------------- #
-    #
-    # Example (a single-digit addition task with prompts like "7+5="), capturing the '+' operator
-    # and the '=' sign by scanning the per-token strings of the prompt:
-    #
-    #     str_tokens = model.to_str_tokens(prompt, prepend_bos=False)  # ["7", "+", "5", "=", ...]
-    #     positions: dict[str, int | None] = {}
-    #     for idx, tok in enumerate(str_tokens):
-    #         if tok.strip() == "+":
-    #             positions["operator"] = idx
-    #         elif tok.strip() == "=":
-    #             positions["eq_sign"] = idx
-    #     return positions
-    #
-    # ----------------------------------------------------------------------------------- #
-    return {}
+    # Heuristic implementation that works well for common short-answer / arithmetic-style prompts.
+    # It extracts token-level strings using model.to_str_tokens and looks for operands (numbers),
+    # operators (+ - * / ×), and an equals sign. It returns a small set of labeled positions so that
+    # downstream analyses can consistently find inputs of interest.
+
+    str_tokens = model.to_str_tokens(prompt, prepend_bos=False)  # list of token strings
+
+    positions: dict[str, int | None] = {}
+    operand_count = 0
+    operator_count = 0
+
+    for idx, tok in enumerate(str_tokens):
+        s = tok.strip()
+        # equals sign
+        if s == "=" and "eq_sign" not in positions:
+            positions["eq_sign"] = idx
+            continue
+
+        # arithmetic operators (include common variants)
+        if s in {"+", "-", "*", "/", "×", "÷"}:
+            key = "operator" if operator_count == 0 else f"operator_{operator_count}"
+            positions[key] = idx
+            operator_count += 1
+            continue
+
+        # number-looking tokens (integer or decimal, optionally signed). We use a permissive
+        # regex because tokenization can split punctuation; this still catches the majority of
+        # numeric tokens used in arithmetic-style prompts.
+        if re.fullmatch(r"[+-]?\d+(?:\.\d+)?", s):
+            key = "operand" if operand_count == 0 else f"operand_{operand_count}"
+            positions[key] = idx
+            operand_count += 1
+            continue
+
+    # If we didn't find certain expected positions, include them with value None so callers can
+    # rely on these keys existing (helps downstream code avoid KeyError checks).
+    for key in ("operand", "operand_1", "operator", "eq_sign"):
+        if key not in positions:
+            positions[key] = None
+
+    return positions
 
 
 def _map_char_to_token(model: TransformerBridge, token_ids: torch.Tensor, target_char_position: int) -> int | None:
