@@ -7,8 +7,6 @@ different runs don't overwrite each other. A small worked example is in comments
 
 import argparse
 
-from transformer_lens import components
-
 
 def generate_output_path(args: argparse.Namespace) -> str:
     """Generate the output path for a run's results.

@@ -43,7 +43,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         "-mnt",
         type=int,
         required=False,
-        default=8,
+        default=10,
         help="Maximum number of new tokens to generate. Defaults to 200.",
     )
     parser.add_argument(

@@ -22,15 +22,16 @@ class PromptDataset:
         """Generate 0-shot prompts for multilingual addition."""
 
         instance = cls()
+        pad_width = len(str(max_operand))
 
         for _ in range(num_prompts):
             a = random.randint(0, max_operand)
             b = random.randint(0, max_operand)
 
             prompt = (
-                f"{render_number(a, language, width=3)}"
+                f"{render_number(a, language, width=pad_width)}"
                 f"+"
-                f"{render_number(b, language, width=3)}="
+                f"{render_number(b, language, width=pad_width)}="
             )
 
             answer = render_answer(a + b, language)
