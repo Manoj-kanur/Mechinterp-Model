@@ -35,10 +35,12 @@ from transformer_lens.hook_points import HookPoint
 from transformer_lens.model_bridge import TransformerBridge
 
 from utils.dataset import PromptDataset
+import re
+from train.create_dataset import DIGIT_MAPS
 
 
-def find_answer_span(generated_text: str) -> tuple[str, int, int] | None:
-    """Locate the model's answer inside the text it generated.
+# def find_answer_span(generated_text: str) -> tuple[str, int, int] | None:
+"""Locate the model's answer inside the text it generated.
 
     WHY this exists: the model just produces a stream of tokens; we need to know which part of
     that stream is "the answer" so we can read activations at the right place. This function
@@ -60,30 +62,24 @@ def find_answer_span(generated_text: str) -> tuple[str, int, int] | None:
     # 2. An equals-sign style "= 42"
     # 3. A leading signed/unsigned integer or float
     # 4. Fallback to the first whitespace-delimited chunk (previous default)
+def find_answer_span(generated_text: str) -> tuple[str, int, int] | None:
+    """Locate the model's answer inside the generated text."""
 
-    if not generated_text:
+    # Collect all valid digit symbols across supported languages.
+    digit_chars = "".join(
+        "".join(digits) for digits in DIGIT_MAPS.values()
+    )
+
+    match = re.search(
+        rf"^\s*([{re.escape(digit_chars)}]+)",
+        generated_text,
+    )
+
+    if not match:
         return None
 
-    # 1) Look for common explicit answer labels
-    m = re.search(r"^\s*(?:Answer|answer)\s*[:\-]\s*([+-]?\d+(?:\.\d+)?)", generated_text)
-    if m:
-        return m.group(1), m.start(1), m.end(1)
+    return match.group(1), match.start(1), match.end(1)
 
-    # 2) Look for an equals-sign followed by a number
-    m = re.search(r"=\s*([+-]?\d+(?:\.\d+)?)", generated_text)
-    if m:
-        return m.group(1), m.start(1), m.end(1)
-
-    # 3) Leading integer/float (signed optional)
-    m = re.search(r"^\s*([+-]?\d+(?:\.\d+)?)", generated_text)
-    if m:
-        return m.group(1), m.start(1), m.end(1)
-
-    # 4) Fallback: first non-whitespace token
-    m = re.search(r"^\s*(\S+)", generated_text)
-    if not m:
-        return None
-    return m.group(1), m.start(1), m.end(1)
 
 
 def find_positions_of_interest(model: TransformerBridge, prompt: str) -> dict[str, int | None]:
@@ -111,43 +107,38 @@ def find_positions_of_interest(model: TransformerBridge, prompt: str) -> dict[st
     # It extracts token-level strings using model.to_str_tokens and looks for operands (numbers),
     # operators (+ - * / ×), and an equals sign. It returns a small set of labeled positions so that
     # downstream analyses can consistently find inputs of interest.
+    question = prompt.rsplit("\n", 1)[-1]
 
-    str_tokens = model.to_str_tokens(prompt, prepend_bos=False)  # list of token strings
+    digit_chars = "".join(
+        "".join(digits) for digits in DIGIT_MAPS.values()   
+    )   
 
-    positions: dict[str, int | None] = {}
-    operand_count = 0
-    operator_count = 0
+    match = re.match(
+        rf"^([{re.escape(digit_chars)}]+)\+([{re.escape(digit_chars)}]+)=$",
+        question,
+    )
 
-    for idx, tok in enumerate(str_tokens):
-        s = tok.strip()
-        # equals sign
-        if s == "=" and "eq_sign" not in positions:
-            positions["eq_sign"] = idx
-            continue
+    if not match:
+        return {}
 
-        # arithmetic operators (include common variants)
-        if s in {"+", "-", "*", "/", "×", "÷"}:
-            key = "operator" if operator_count == 0 else f"operator_{operator_count}"
-            positions[key] = idx
-            operator_count += 1
-            continue
+    operand_a, operand_b = match.group(1), match.group(2)
 
-        # number-looking tokens (integer or decimal, optionally signed). We use a permissive
-        # regex because tokenization can split punctuation; this still catches the majority of
-        # numeric tokens used in arithmetic-style prompts.
-        if re.fullmatch(r"[+-]?\d+(?:\.\d+)?", s):
-            key = "operand" if operand_count == 0 else f"operand_{operand_count}"
-            positions[key] = idx
-            operand_count += 1
-            continue
+    question_start = len(prompt) - len(question)
 
-    # If we didn't find certain expected positions, include them with value None so callers can
-    # rely on these keys existing (helps downstream code avoid KeyError checks).
-    for key in ("operand", "operand_1", "operator", "eq_sign"):
-        if key not in positions:
-            positions[key] = None
+    char_positions = {
+        "operand_a": question_start + len(operand_a) - 1,
+        "operator": question_start + len(operand_a),
+        "operand_b": question_start + len(operand_a) + 1 + len(operand_b) - 1,
+        "eq_sign": len(prompt) - 1,
+    }
 
-    return positions
+    token_ids = model.to_tokens(prompt, prepend_bos=False)[0]
+
+    return {
+        name: _map_char_to_token(model, token_ids, char_pos)
+        for name, char_pos in char_positions.items()
+    }
+
 
 
 def _map_char_to_token(model: TransformerBridge, token_ids: torch.Tensor, target_char_position: int) -> int | None:
